@@ -3,18 +3,14 @@ package main
 import (
 	"C"
 	"fmt"
-	"unsafe"
-
 	"github.com/fluent/fluent-bit-go/output"
-	jsoniter "github.com/json-iterator/go"
-
 	"os"
 	"time"
+	"unsafe"
 )
 
 var (
-	rc   *redisClient
-	json = jsoniter.ConfigCompatibleWithStandardLibrary
+	rc *redisClient
 	// both variables are set in Makefile
 	revision  string
 	builddate string
@@ -23,7 +19,7 @@ var (
 
 //export FLBPluginRegister
 func FLBPluginRegister(ctx unsafe.Pointer) int {
-	return output.FLBPluginRegister(ctx, "redis", "Redis Output Plugin.")
+	return output.FLBPluginRegister(ctx, "redis-metric", "Redis Metric Output Plugin.")
 }
 
 type logmessage struct {
@@ -35,7 +31,7 @@ type Plugin interface {
 	Unregister(ctx unsafe.Pointer)
 	GetRecord(dec *output.FLBDecoder) (ret int, ts interface{}, rec map[interface{}]interface{})
 	NewDecoder(data unsafe.Pointer, length int) *output.FLBDecoder
-	Send(values []*logmessage) error
+	Send(metrics []*MetricRecord) error
 	Exit(code int)
 }
 
@@ -61,8 +57,8 @@ func (p *fluentPlugin) Exit(code int) {
 	os.Exit(code)
 }
 
-func (p *fluentPlugin) Send(values []*logmessage) error {
-	return rc.send(values)
+func (p *fluentPlugin) Send(metrics []*MetricRecord) error {
+	return rc.sendMetrics(metrics)
 }
 
 // ctx (context) pointer to fluentbit context (state/ c code)
@@ -73,11 +69,11 @@ func FLBPluginInit(ctx unsafe.Pointer) int {
 	password := plugin.Environment(ctx, "Password")
 	key := plugin.Environment(ctx, "Key")
 	db := plugin.Environment(ctx, "DB")
-	usetls := plugin.Environment(ctx, "UseTLS")
-	tlsskipverify := plugin.Environment(ctx, "TLSSkipVerify")
+	useTls := plugin.Environment(ctx, "UseTLS")
+	tlsSkipVerify := plugin.Environment(ctx, "TLSSkipVerify")
 
 	// create a pool of redis connection pools
-	config, err := getRedisConfig(hosts, password, db, usetls, tlsskipverify, key)
+	config, err := getRedisConfig(hosts, password, db, useTls, tlsSkipVerify, key)
 	if err != nil {
 		fmt.Printf("configuration errors: %v\n", err)
 		// FIXME use fluent-bit method to err in init
@@ -89,7 +85,7 @@ func FLBPluginInit(ctx unsafe.Pointer) int {
 		pools: newPoolsFromConfig(config),
 		key:   config.key,
 	}
-	fmt.Printf("[out-redis] build:%s version:%s redis connection to: %s\n", builddate, revision, config)
+	fmt.Printf("[out-redis-metric] build:%s version:%s redis connection to: %s\n", builddate, revision, config)
 	return output.FLB_OK
 }
 
@@ -106,7 +102,7 @@ func FLBPluginFlush(data unsafe.Pointer, length C.int, tag *C.char) int {
 
 	// Iterate Records
 
-	var logs []*logmessage
+	var metrics []*MetricRecord
 
 	for {
 		// Extract Record
@@ -127,24 +123,25 @@ func FLBPluginFlush(data unsafe.Pointer, length C.int, tag *C.char) int {
 			timeStamp = time.Now()
 		}
 
-		js, err := createJSON(timeStamp, C.GoString(tag), record)
+		metric, err := NewMetricRecord(timeStamp, record)
 		if err != nil {
 			fmt.Printf("%v\n", err)
+			// TODO reevaluate this from original code:
 			// DO NOT RETURN HERE becase one message has an error when json is
 			// generated, but a retry would fetch ALL messages again. instead an
 			// error should be printed to console
 			continue
 		}
-		logs = append(logs, js)
+		metrics = append(metrics, metric)
 	}
 
-	err := plugin.Send(logs)
+	err := plugin.Send(metrics)
 	if err != nil {
 		fmt.Printf("%v\n", err)
 		return output.FLB_RETRY
 	}
 
-	fmt.Printf("pushed %d logs\n", len(logs))
+	fmt.Printf("pushed %d logs\n", len(metrics))
 
 	// Return options:
 	//
@@ -168,19 +165,6 @@ func parseMap(mapInterface map[interface{}]interface{}) map[string]interface{} {
 		}
 	}
 	return m
-}
-
-func createJSON(timestamp time.Time, tag string, record map[interface{}]interface{}) (*logmessage, error) {
-	m := parseMap(record)
-	// convert timestamp to RFC3339Nano which is logstash format
-	m["@timestamp"] = timestamp.UTC().Format(time.RFC3339Nano)
-	m["@tag"] = tag
-
-	js, err := json.Marshal(m)
-	if err != nil {
-		return nil, fmt.Errorf("error creating message for REDIS: %w", err)
-	}
-	return &logmessage{data: js}, nil
 }
 
 //export FLBPluginExit

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/gomodule/redigo/redis"
 	"github.com/stretchr/testify/assert"
@@ -141,17 +142,22 @@ func TestPoolsFromConfiguration(t *testing.T) {
 }
 
 type testConnection struct {
-	invokes [][]byte
-	flushed bool
-	fail    string
+	invokeCommands []string
+	invokeHashes   []string
+	invokeKeys     []string
+	invokeValues   []int64
+	flushed        bool
+	fail           string
 }
 
 func (r *testConnection) Send(cmd string, args ...interface{}) error {
-	data := args[1].([]byte)
-	if string(data) == r.fail {
+	r.invokeCommands = append(r.invokeCommands, cmd)
+	r.invokeHashes = append(r.invokeHashes, args[0].(string))
+	if args[1].(string) == r.fail {
 		return fmt.Errorf("expected fail %q is encountered", r.fail)
 	}
-	r.invokes = append(r.invokes, data)
+	r.invokeKeys = append(r.invokeKeys, args[1].(string))
+	r.invokeValues = append(r.invokeValues, args[2].(int64))
 	return nil
 }
 
@@ -162,26 +168,26 @@ func (r *testConnection) Flush() error {
 
 func TestRedisSendMessage(t *testing.T) {
 	rc := &redisClient{}
-	values := []*logmessage{
-		&logmessage{data: []byte("test1")},
-		&logmessage{data: []byte("test2")},
+	values := []*MetricRecord{
+		&MetricRecord{ts: time.Now(), app: "abcd1234", name: "files", value: 100},
+		&MetricRecord{ts: time.Now(), app: "wxyz4321", name: "requests", value: 200},
+		&MetricRecord{ts: time.Now(), app: "abcd1234", name: "messages", value: 30},
 	}
 	conn := &testConnection{}
-	err := rc.sendImpl(conn, values)
+	err := rc.sendMetricsImpl(conn, values)
 	assert.NoError(t, err, "send should be ok")
-	assert.Equal(t, len(values), len(conn.invokes), "every messages should be sended")
+	assert.Equal(t, len(values), len(conn.invokeCommands), "all metrics should be sent")
 	assert.True(t, conn.flushed, "data should be flushed")
 }
 
 func TestRedisSendFailureMessage(t *testing.T) {
 	rc := &redisClient{}
-	values := []*logmessage{
-		&logmessage{data: []byte("test1")},
-		&logmessage{data: []byte("failure")},
-		&logmessage{data: []byte("test2")},
+	values := []*MetricRecord{
+		&MetricRecord{ts: time.Now(), app: "wxyz4321", name: "files", value: 100},
+		&MetricRecord{ts: time.Now(), app: "abcd1234", name: "failure", value: 200},
 	}
 	conn := &testConnection{fail: "failure"}
-	err := rc.sendImpl(conn, values)
+	err := rc.sendMetricsImpl(conn, values)
 	assert.Error(t, err, "send should not be ok")
 	assert.False(t, conn.flushed, "data should not be flushed")
 }

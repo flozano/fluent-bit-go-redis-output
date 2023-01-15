@@ -9,7 +9,7 @@ services:
 
   fluent-bit-go-redis:
     tty: true
-    depends_on: 
+    depends_on:
       - redis
     build:
       context: .

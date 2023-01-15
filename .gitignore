@@ -1,3 +1,5 @@
+/.idea/
+/coverage.txt
 vendor
-out_redis.h
-out_redis.so
+/out_redis_metrics.h
+/out_redis_metrics.so

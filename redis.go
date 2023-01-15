@@ -182,7 +182,7 @@ func newPool(host string, port int, db int, password string, usetls, tlsskipveri
 	}
 }
 
-func (r *redisClient) send(values []*logmessage) error {
+func (r *redisClient) sendMetrics(values []*MetricRecord) error {
 	pool, err := r.pools.getRedisPoolFromPools()
 	if err != nil {
 		return err
@@ -190,18 +190,21 @@ func (r *redisClient) send(values []*logmessage) error {
 	conn := pool.Get()
 	defer conn.Close()
 
-	return r.sendImpl(&redisConn{conn}, values)
+	return r.sendMetricsImpl(&redisConn{conn}, values)
 }
 
-func (r *redisClient) sendImpl(rd asyncConnection, values []*logmessage) error {
+func (r *redisClient) sendMetricsImpl(rd asyncConnection, values []*MetricRecord) error {
 	for _, v := range values {
-		err := rd.Send("RPUSH", r.key, v.data)
-		if err != nil {
-			v := string(v.data)
-			if len(v) > 15 {
-				v = v[0:12] + "..."
+		if v.discrete {
+			err := rd.Send("HSET", v.ToKey(), v.name, v.value)
+			if err != nil {
+				return err
 			}
-			return fmt.Errorf("error setting key %s to %s: %w", r.key, v, err)
+		} else {
+			err := rd.Send("HINCRBY", v.ToKey(), v.name, v.value)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return rd.Flush()
