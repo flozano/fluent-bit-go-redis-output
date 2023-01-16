@@ -11,7 +11,6 @@ import (
 )
 
 type redisClient struct {
-	key   string
 	pools *redisPools
 }
 
@@ -25,7 +24,6 @@ type redisConfig struct {
 	password      string
 	usetls        bool
 	tlsskipverify bool
-	key           string
 }
 type redisPools struct {
 	pools []*redis.Pool
@@ -51,10 +49,10 @@ func (r *redisConn) Flush() error {
 }
 
 func (rc *redisConfig) String() string {
-	return fmt.Sprintf("hosts:%v db:%d usetls:%t tlsskipverify:%t key:%s", rc.hosts, rc.db, rc.usetls, rc.tlsskipverify, rc.key)
+	return fmt.Sprintf("hosts:%v db:%d usetls:%t tlsskipverify:%t", rc.hosts, rc.db, rc.usetls, rc.tlsskipverify)
 }
 
-func getRedisConfig(hosts, password, db, usetls, tlsskipverify, key string) (*redisConfig, error) {
+func getRedisConfig(hosts, password, db, usetls, tlsskipverify string) (*redisConfig, error) {
 	rc := &redisConfig{}
 	// defaults
 	if hosts == "" {
@@ -65,9 +63,6 @@ func getRedisConfig(hosts, password, db, usetls, tlsskipverify, key string) (*re
 	}
 	if tlsskipverify == "" {
 		tlsskipverify = "True"
-	}
-	if key == "" {
-		key = "logstash"
 	}
 
 	hostAndPorts := strings.Split(hosts, " ")
@@ -113,7 +108,6 @@ func getRedisConfig(hosts, password, db, usetls, tlsskipverify, key string) (*re
 	}
 	rc.tlsskipverify = tlsverify
 	rc.password = password
-	rc.key = key
 
 	return rc, nil
 }

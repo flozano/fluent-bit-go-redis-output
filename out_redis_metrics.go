@@ -67,13 +67,12 @@ func (p *fluentPlugin) Send(metrics []*MetricRecord) error {
 func FLBPluginInit(ctx unsafe.Pointer) int {
 	hosts := plugin.Environment(ctx, "Hosts")
 	password := plugin.Environment(ctx, "Password")
-	key := plugin.Environment(ctx, "Key")
 	db := plugin.Environment(ctx, "DB")
 	useTls := plugin.Environment(ctx, "UseTLS")
 	tlsSkipVerify := plugin.Environment(ctx, "TLSSkipVerify")
 
 	// create a pool of redis connection pools
-	config, err := getRedisConfig(hosts, password, db, useTls, tlsSkipVerify, key)
+	config, err := getRedisConfig(hosts, password, db, useTls, tlsSkipVerify)
 	if err != nil {
 		fmt.Printf("configuration errors: %v\n", err)
 		// FIXME use fluent-bit method to err in init
@@ -83,7 +82,6 @@ func FLBPluginInit(ctx unsafe.Pointer) int {
 	}
 	rc = &redisClient{
 		pools: newPoolsFromConfig(config),
-		key:   config.key,
 	}
 	fmt.Printf("[out-redis-metric] build:%s version:%s redis connection to: %s\n", builddate, revision, config)
 	return output.FLB_OK
@@ -111,7 +109,6 @@ func FLBPluginFlush(data unsafe.Pointer, length C.int, tag *C.char) int {
 			break
 		}
 
-		// Print record keys and values
 		var timeStamp time.Time
 		switch t := ts.(type) {
 		case output.FLBTime:
