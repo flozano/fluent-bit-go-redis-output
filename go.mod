@@ -7,6 +7,7 @@ require (
 	github.com/gomodule/redigo v1.8.9
 	github.com/spf13/cast v1.5.0
 	github.com/stretchr/testify v1.8.1
+	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
 )
 
 require (

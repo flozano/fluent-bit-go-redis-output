@@ -2,8 +2,8 @@ package main
 
 import (
 	"C"
-	"fmt"
 	"github.com/fluent/fluent-bit-go/output"
+	"log"
 	"os"
 	"time"
 	"unsafe"
@@ -74,7 +74,7 @@ func FLBPluginInit(ctx unsafe.Pointer) int {
 	// create a pool of redis connection pools
 	config, err := getRedisConfig(hosts, password, db, useTls, tlsSkipVerify)
 	if err != nil {
-		fmt.Printf("configuration errors: %v\n", err)
+		log.Printf("configuration errors: %v\n", err)
 		// FIXME use fluent-bit method to err in init
 		plugin.Unregister(ctx)
 		plugin.Exit(1)
@@ -83,7 +83,7 @@ func FLBPluginInit(ctx unsafe.Pointer) int {
 	rc = &redisClient{
 		pools: newPoolsFromConfig(config),
 	}
-	fmt.Printf("[out-redis-metric] build:%s version:%s redis connection to: %s\n", builddate, revision, config)
+	log.Printf("build:%s version:%s redis connection to: %s\n", builddate, revision, config)
 	return output.FLB_OK
 }
 
@@ -116,13 +116,13 @@ func FLBPluginFlush(data unsafe.Pointer, length C.int, tag *C.char) int {
 		case uint64:
 			timeStamp = time.Unix(int64(t), 0)
 		default:
-			fmt.Print("given time is not in a known format, defaulting to now.\n")
+			log.Print("given time is not in a known format, defaulting to now.\n")
 			timeStamp = time.Now()
 		}
 
 		metric, err := NewMetricRecord(timeStamp, record)
 		if err != nil {
-			fmt.Printf("%v\n", err)
+			log.Printf("%v\n", err)
 			// TODO reevaluate this from original code:
 			// DO NOT RETURN HERE becase one message has an error when json is
 			// generated, but a retry would fetch ALL messages again. instead an
@@ -134,11 +134,11 @@ func FLBPluginFlush(data unsafe.Pointer, length C.int, tag *C.char) int {
 
 	err := plugin.Send(metrics)
 	if err != nil {
-		fmt.Printf("%v\n", err)
+		log.Printf("%v\n", err)
 		return output.FLB_RETRY
 	}
 
-	fmt.Printf("pushed %d logs\n", len(metrics))
+	log.Printf("pushed %d logs\n", len(metrics))
 
 	// Return options:
 	//
