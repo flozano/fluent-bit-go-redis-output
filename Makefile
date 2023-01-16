@@ -11,7 +11,7 @@ endif
 export GO111MODULE := on
 
 all: test
-	go build -ldflags "-X 'main.revision=$(GITVERSION)' -X 'main.builddate=$(BUILDDATE)'" -buildmode=c-shared -o out_redis.so .
+	go build -ldflags "-X 'main.revision=$(GITVERSION)' -X 'main.builddate=$(BUILDDATE)'" -buildmode=c-shared -o out_redis_metrics.so .
 
 test:
 	go test -cover -race -coverprofile=coverage.txt -covermode=atomic
@@ -20,4 +20,4 @@ clean:
 	rm -rf *.so *.h *~
 
 dockerimage:
-	docker build -t majst01/fluent-bit-go-redis-output .
+	docker build -t flozano/fluent-bit-go-redis-output .

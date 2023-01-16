@@ -11,7 +11,6 @@ import (
 )
 
 type redisClient struct {
-	key   string
 	pools *redisPools
 }
 
@@ -25,7 +24,6 @@ type redisConfig struct {
 	password      string
 	usetls        bool
 	tlsskipverify bool
-	key           string
 }
 type redisPools struct {
 	pools []*redis.Pool
@@ -51,10 +49,10 @@ func (r *redisConn) Flush() error {
 }
 
 func (rc *redisConfig) String() string {
-	return fmt.Sprintf("hosts:%v db:%d usetls:%t tlsskipverify:%t key:%s", rc.hosts, rc.db, rc.usetls, rc.tlsskipverify, rc.key)
+	return fmt.Sprintf("hosts:%v db:%d usetls:%t tlsskipverify:%t", rc.hosts, rc.db, rc.usetls, rc.tlsskipverify)
 }
 
-func getRedisConfig(hosts, password, db, usetls, tlsskipverify, key string) (*redisConfig, error) {
+func getRedisConfig(hosts, password, db, usetls, tlsskipverify string) (*redisConfig, error) {
 	rc := &redisConfig{}
 	// defaults
 	if hosts == "" {
@@ -65,9 +63,6 @@ func getRedisConfig(hosts, password, db, usetls, tlsskipverify, key string) (*re
 	}
 	if tlsskipverify == "" {
 		tlsskipverify = "True"
-	}
-	if key == "" {
-		key = "logstash"
 	}
 
 	hostAndPorts := strings.Split(hosts, " ")
@@ -113,7 +108,6 @@ func getRedisConfig(hosts, password, db, usetls, tlsskipverify, key string) (*re
 	}
 	rc.tlsskipverify = tlsverify
 	rc.password = password
-	rc.key = key
 
 	return rc, nil
 }
@@ -182,7 +176,7 @@ func newPool(host string, port int, db int, password string, usetls, tlsskipveri
 	}
 }
 
-func (r *redisClient) send(values []*logmessage) error {
+func (r *redisClient) sendMetrics(values []*MetricRecord) error {
 	pool, err := r.pools.getRedisPoolFromPools()
 	if err != nil {
 		return err
@@ -190,18 +184,21 @@ func (r *redisClient) send(values []*logmessage) error {
 	conn := pool.Get()
 	defer conn.Close()
 
-	return r.sendImpl(&redisConn{conn}, values)
+	return r.sendMetricsImpl(&redisConn{conn}, values)
 }
 
-func (r *redisClient) sendImpl(rd asyncConnection, values []*logmessage) error {
+func (r *redisClient) sendMetricsImpl(rd asyncConnection, values []*MetricRecord) error {
 	for _, v := range values {
-		err := rd.Send("RPUSH", r.key, v.data)
-		if err != nil {
-			v := string(v.data)
-			if len(v) > 15 {
-				v = v[0:12] + "..."
+		if v.discrete {
+			err := rd.Send("HSET", v.ToKey(), v.name, v.value)
+			if err != nil {
+				return err
 			}
-			return fmt.Errorf("error setting key %s to %s: %w", r.key, v, err)
+		} else {
+			err := rd.Send("HINCRBY", v.ToKey(), v.name, v.value)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return rd.Flush()

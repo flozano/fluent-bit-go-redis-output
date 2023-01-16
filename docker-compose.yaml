@@ -9,10 +9,11 @@ services:
 
   fluent-bit-go-redis:
     tty: true
-    depends_on: 
+    depends_on:
       - redis
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: docker.io/flozano/fluent-bit-go-redis-output
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
     volumes:
       - $PWD/test.log:/test.log

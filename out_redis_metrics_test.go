@@ -33,50 +33,18 @@ func TestParseMap(t *testing.T) {
 		pm["annotations"].(map[string]interface{})["checksum/config"])
 }
 
-func TestCreateJSON(t *testing.T) {
-	record := make(map[interface{}]interface{})
-	record["key"] = "value"
-	record["five"] = 5
-	ts, _ := time.Parse(timeFormat, "2006-01-02 15:04:05.999999999 -0700 MST")
-	js, err := createJSON(ts, "atag", record)
-
-	if err != nil {
-		assert.Fail(t, "it is not expected that the call to createJSON fails:%v", err)
-	}
-	assert.NotNil(t, js, "json must not be nil")
-	result := make(map[string]interface{})
-	err = json.Unmarshal(js.data, &result)
-	if err != nil {
-		assert.Fail(t, "it is not expected that unmarshal of json fails:%v", err)
-	}
-	assert.Equal(t, result["@timestamp"], "2006-01-02T22:04:05.999999999Z")
-	assert.Equal(t, result["@tag"], "atag")
-	assert.Equal(t, result["key"], "value")
-	assert.Equal(t, result["five"], float64(5))
-}
-
-func BenchmarkCreateJSON(b *testing.B) {
-	record := make(map[interface{}]interface{})
-	record["key"] = "value"
-	record["five"] = 5
-	ts, _ := time.Parse(time.RFC3339Nano, "2006-01-02 15:04:05.999999999 -0700 MST")
-	for i := 0; i < b.N; i++ {
-		_, err := createJSON(ts, "atag", record)
-		assert.NoError(b, err)
-	}
-}
-
 type testrecord struct {
 	rc   int
 	ts   interface{}
 	data map[interface{}]interface{}
 }
+
 type testFluentPlugin struct {
-	hosts       string
-	db          string
-	records     []testrecord
-	position    int
-	logmessages []*logmessage
+	hosts    string
+	db       string
+	records  []testrecord
+	position int
+	metrics  []*MetricRecord
 }
 
 func (p *testFluentPlugin) Environment(ctx unsafe.Pointer, key string) string {
@@ -100,8 +68,8 @@ func (p *testFluentPlugin) Environment(ctx unsafe.Pointer, key string) string {
 func (p *testFluentPlugin) Unregister(ctx unsafe.Pointer)                                 {}
 func (p *testFluentPlugin) NewDecoder(data unsafe.Pointer, length int) *output.FLBDecoder { return nil }
 func (p *testFluentPlugin) Exit(code int)                                                 {}
-func (p *testFluentPlugin) Send(values []*logmessage) error {
-	p.logmessages = append(p.logmessages, values...)
+func (p *testFluentPlugin) Send(values []*MetricRecord) error {
+	p.metrics = append(p.metrics, values...)
 	return nil
 }
 func (p *testFluentPlugin) GetRecord(dec *output.FLBDecoder) (int, interface{}, map[interface{}]interface{}) {
@@ -133,7 +101,9 @@ func TestPluginFlusher(t *testing.T) {
 	testplugin := &testFluentPlugin{hosts: "hosta hostb", db: "0"}
 	ts := time.Date(2018, time.February, 10, 10, 11, 12, 0, time.UTC)
 	testrecords := map[interface{}]interface{}{
-		"mykey": "myvalue",
+		"a": "bbbccc123",
+		"m": "files",
+		"v": 10,
 	}
 	testplugin.addrecord(0, output.FLBTime{Time: ts}, testrecords)
 	testplugin.addrecord(0, uint64(ts.Unix()), testrecords)
@@ -141,16 +111,16 @@ func TestPluginFlusher(t *testing.T) {
 	plugin = testplugin
 	res := FLBPluginFlush(nil, 0, nil)
 	assert.Equal(t, output.FLB_OK, res)
-	assert.Len(t, testplugin.logmessages, len(testplugin.records))
-	var parsed map[string]interface{}
-	err := json.Unmarshal(testplugin.logmessages[0].data, &parsed)
-	assert.NoError(t, err)
-	assert.Equal(t, testrecords["mykey"], parsed["mykey"])
-	assert.Equal(t, ts.Format(time.RFC3339Nano), parsed["@timestamp"])
-	err = json.Unmarshal(testplugin.logmessages[1].data, &parsed)
-	assert.NoError(t, err)
-	assert.Equal(t, ts.Format(time.RFC3339Nano), parsed["@timestamp"])
-	err = json.Unmarshal(testplugin.logmessages[2].data, &parsed)
-	assert.NoError(t, err)
-	assert.NotEqual(t, ts.Format(time.RFC3339Nano), parsed["@timestamp"])
+	assert.Len(t, testplugin.metrics, len(testplugin.records))
+	assert.Equal(t, testrecords["a"], testplugin.metrics[0].app)
+	assert.Equal(t, testrecords["m"], testplugin.metrics[0].name)
+	assert.Equal(t, ts.Format("2001-01-01"), testplugin.metrics[0].ts.Format("2001-01-01"))
+
+	assert.Equal(t, testrecords["a"], testplugin.metrics[1].app)
+	assert.Equal(t, testrecords["m"], testplugin.metrics[1].name)
+	assert.Equal(t, ts.Format("2001-01-01"), testplugin.metrics[1].ts.Format("2001-01-01"))
+
+	assert.Equal(t, testrecords["a"], testplugin.metrics[2].app)
+	assert.Equal(t, testrecords["m"], testplugin.metrics[2].name)
+	assert.NotEqual(t, ts.Format("2001-01-01"), testplugin.metrics[2].ts.Format("2001-01-01"))
 }
