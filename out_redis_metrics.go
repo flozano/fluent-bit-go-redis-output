@@ -19,7 +19,7 @@ var (
 
 //export FLBPluginRegister
 func FLBPluginRegister(ctx unsafe.Pointer) int {
-	return output.FLBPluginRegister(ctx, "redis-metric", "Redis Metric Output Plugin.")
+	return output.FLBPluginRegister(ctx, "redis-metrics", "Redis Metric Output Plugin.")
 }
 
 type logmessage struct {
