@@ -1,0 +1,32 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: build
+        run: |
+          make clean all
+          mkdir -p .rpmpkg/opt/fluent-bit-redis-metrics-output/lib
+          mkdir -p .rpmpkg/opt/fluent-bit-redis-metrics-output/etc
+          cp out_redis_metrics.so .rpmpkg/opt/fluent-bit-redis-metrics-output/lib
+          cp *.conf .rpmpkg/opt/fluent-bit-redis-metrics-output/etc
+          cp log_generator.sh .rpmpkg/opt/fluent-bit-redis-metrics-output/etc
+          chmod +x .rpmpkg/opt/fluent-bit-redis-metrics-output/lib/*.so
+
+      - uses: flozano/build-rpm-action@v1
+        with:
+          summary: 'fluent-bit-redis-metrics-output'
+          package: fluent-bit-redis-metrics-output
+          package_root: .rpmpkg
+          maintainer: flozano
+          version: ${{ github.ref }} # refs/tags/v*.*.*
+          arch: 'x86_64'
+          desc: 'fluent-bit-go-redis-metrics-output'
